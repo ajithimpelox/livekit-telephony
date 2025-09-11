@@ -1,103 +1,132 @@
-# LiveKit Telephony IVR System
+# LiveKit Telephony Agent
 
-A consolidated LiveKit telephony project for handling both incoming and outgoing calls with an IVR agent.
+A consolidated LiveKit telephony project for handling both incoming and outgoing calls with a powerful, AI-driven agent.
 
 ## Project Structure
 
 ```
 livekit-telephony/
 ├── .env                    # Environment configuration
-├── main.py                 # Main IVR agent for incoming calls
-├── trigger_outgoing_call.py # Script to trigger outgoing calls
-├── telephony/              # Supporting telephony modules
-│   ├── answer_call.py      # Call answering utilities
-│   ├── sip_lifecycle.py    # SIP lifecycle management
-│   └── warm_handoff.py     # Call transfer functionality
+├── main.py                 # Main entrypoint for the LiveKit agent
+├── unified_agent.py        # Core agent logic
+├── trigger_outgoing_call.py # Script to initiate outgoing calls for testing
+├── agent.py                # Agent entrypoint resolver
+├── database/               # Database interaction logic
+│   ├── db_queries.py       # Functions for querying the database
+│   └── mysql/
+│       └── db_manager.py   # MySQL database manager
+├── mcp_client/             # MCP (Multi-platform Communication Protocol) client
+│   ├── agent_tools.py      # Tools for agent interaction with MCP
+│   ├── cache_service.py    # Caching for MCP
+│   ├── server.py           # MCP server interaction
+│   └── util.py             # MCP utilities
+├── tools/                  # Agent tools
+│   └── rag_tools.py        # RAG (Retrieval-Augmented Generation) tools
+├── utils/                  # Utility functions and constants
+│   ├── common.py           # Common utility functions
+│   ├── constants.py        # Project constants
+│   └── enums.py            # Enumerations
 └── venv-3.12/              # Python virtual environment
 ```
 
 ## Setup
 
-1. **Environment Configuration**
-   - Ensure your `.env` file contains all required variables:
-     ```
-     LIVEKIT_URL=wss://your-livekit-url
-     LIVEKIT_API_KEY=your-api-key
-     LIVEKIT_API_SECRET=your-api-secret
-     SIP_OUTBOUND_TRUNK_ID=ST_your-outbound-trunk-id
-     SIP_INBOUND_TRUNK_ID=ST_your-inbound-trunk-id
-     OPENAI_API_KEY=your-openai-api-key
-     DEEPGRAM_API_KEY=your-deepgram-api-key
-     ```
+1.  **Environment Configuration**
+    -   Ensure your `.env` file contains all required variables:
+        ```
+        LIVEKIT_URL=wss://your-livekit-url
+        LIVEKIT_API_KEY=your-api-key
+        LIVEKIT_API_SECRET=your-api-secret
+        SIP_OUTBOUND_TRUNK_ID=ST_your-outbound-trunk-id
+        # Add other necessary environment variables for database, LLMs, etc.
+        # e.g. DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
+        # e.g. OPENAI_API_KEY, GROQ_API_KEY, GOOGLE_API_KEY
+        ```
 
-2. **Virtual Environment**
-   ```bash
-   # Activate the virtual environment
-   venv-3.12\Scripts\activate  # Windows
-   # or
-   source venv-3.12/bin/activate  # Linux/Mac
-   ```
+2.  **Virtual Environment**
+    ```bash
+    # Activate the virtual environment
+    venv-3.12\Scripts\activate  # Windows
+    # or
+    source venv-3.12/bin/activate  # Linux/Mac
+    ```
+
+3.  **Install Dependencies**
+    ```bash
+    pip install -r requirements.txt
+    ```
 
 ## Usage
 
-### Starting the IVR Agent (Incoming Calls)
+### Starting the Agent (for incoming calls)
 
-To start receiving incoming calls:
+To start the agent and listen for incoming calls:
 
 ```bash
 python main.py
 ```
 
 This will:
-- Start the IVR agent
-- Listen for incoming calls on your configured SIP trunk
-- Automatically handle and route incoming calls
-- Provide interactive voice responses
+- Start the LiveKit agent.
+- Listen for incoming SIP calls on your configured trunk.
+- Route incoming calls to the `UnifiedAgent`.
 
 ### Triggering Outgoing Calls
 
-To make an outgoing call for testing:
+To make an outgoing call for testing purposes:
 
 ```bash
 python trigger_outgoing_call.py
 ```
 
 This will:
-- Create an agent dispatch
-- Initiate a SIP call to the configured phone number
-- Connect the call to the IVR agent
+- Create an agent dispatch job.
+- Initiate a SIP call to the phone number configured in the script.
+- Connect the call to the `UnifiedAgent`.
 
 **To customize the target phone number:**
-1. Edit `trigger_outgoing_call.py`
-2. Modify the `phone_number` variable in the `test_outgoing_call()` function
-3. Run the script
+1.  Edit `trigger_outgoing_call.py`
+2.  Modify the `phone_number` variable in the `test_outgoing_call()` function.
+3.  Run the script.
+
+## Call Flow
+
+### Inbound Call
+1.  A SIP call is received by the LiveKit server.
+2.  LiveKit creates a room and a job for the `telephone-enhanced-agent`.
+3.  `main.py` starts the agent.
+4.  `unified_agent.py`'s `agent_entrypoint` is invoked.
+5.  The agent fetches metadata (e.g., chatbot ID, customer ID) from the database using the SIP trunk phone number.
+6.  The agent checks for customer credits.
+7.  A prompt is constructed using a base prompt, custom instructions, and a knowledge base summary.
+8.  The agent session starts, and a greeting is sent to the caller.
+9.  The agent interacts with the caller using LLM, TTS, and STT.
+
+### Outbound Call
+1.  The `trigger_outgoing_call.py` script is executed.
+2.  The script creates an agent dispatch job with specified metadata (e.g., chatbot ID, customer ID, phone number).
+3.  LiveKit initiates a SIP call to the specified phone number.
+4.  When the call is answered, the participant is connected to the room with the agent.
+5.  The agent flow is similar to the inbound call, but it uses the metadata provided in the dispatch request.
 
 ## Features
 
-- **Incoming Call Handling**: Automatic reception and processing of incoming calls
-- **Outgoing Call Initiation**: Programmatic outgoing call triggering
-- **IVR Functionality**: Interactive voice response with AI-powered conversations
-- **Call Transfer**: Warm handoff capabilities to human agents
-- **SIP Integration**: Full SIP trunk support for telephony operations
+-   **Inbound and Outbound Calls**: Handles both incoming and outgoing PSTN calls via SIP.
+-   **AI-Powered Agent**: Utilizes Large Language Models (LLMs) for natural conversations.
+-   **Dynamic Provider Selection**: Dynamically selects LLM, Text-to-Speech (TTS), and Speech-to-Text (STT) providers (e.g., Groq, OpenAI, Google) based on call metadata.
+-   **Knowledge Base Integration**: Uses Retrieval-Augmented Generation (RAG) to provide answers from a knowledge base.
+-   **Credit Management**: Checks and deducts customer credits for using the service.
+-   **Database Integration**: Fetches agent configuration and logs chat transactions to a database.
+-   **MCP Integration**: Supports Multi-platform Communication Protocol for advanced communication scenarios.
 
 ## Logs and Monitoring
 
-- Both scripts provide detailed logging for call status and processing
-- Monitor the console output for real-time call information
-- Check for any configuration errors in the logs
+-   The agent provides detailed logging for the entire call lifecycle.
+-   Monitor the console output for real-time information and potential errors.
 
 ## Troubleshooting
 
-1. **Environment Variables**: Ensure all required variables are set in `.env`
-2. **SIP Trunk Configuration**: Verify your SIP trunk IDs are correct
-3. **Network Connectivity**: Check your LiveKit server connectivity
-4. **API Keys**: Validate your OpenAI and Deepgram API keys
-
-## Support Files
-
-The `telephony/` directory contains supporting modules:
-- `answer_call.py`: Utilities for call answering
-- `sip_lifecycle.py`: SIP call lifecycle management
-- `warm_handoff.py`: Call transfer functionality
-
-These are automatically used by the main scripts and don't need to be run directly.
+1.  **Environment Variables**: Ensure all required variables are correctly set in the `.env` file.
+2.  **SIP Trunk Configuration**: Verify that your SIP trunk IDs are correct in the LiveKit project settings and your `.env` file.
+3.  **Database Connection**: Check if the database credentials in your `.env` file are correct and the database is accessible.
+4.  **API Keys**: Make sure the API keys for your selected LLM, TTS, and STT providers are valid.

@@ -7,6 +7,7 @@ from datetime import datetime
 from livekit.agents import (
     Agent,
     AgentSession,
+    ConversationItemAddedEvent,
     JobContext,
     AutoSubscribe,
     BackgroundAudioPlayer,
@@ -35,12 +36,9 @@ from database.db_queries import (
     check_customer_credits,
     deduct_customer_credits,
     get_chat_bot_by_id,
-    get_chat_bot_by_trunk_phone_number,
     get_agent_custom_prompt,
     get_realtime_information,
-    log_chat_transaction,
     fetch_metadata_by_trunk_phone_number,
-    fetch_metadata_by_chat_bot_id,
     fetch_customer_mcp_server_urls
 )
 from tools.rag_tools import get_rag_information_from_vector_store
@@ -92,9 +90,7 @@ async def agent_entrypoint(ctx: JobContext):
         metadata = await fetch_metadata_by_trunk_phone_number(trunkPhoneNumber)
 
     logger.info(f"Unified metadata: {metadata}")
-    conversation_id = metadata.get("conversationId")
     customer_id = int(metadata.get("customerId") or 1)
-    user_session_id = metadata.get("userSessionId") or 0
     knowledgebase_id = int(metadata.get("knowledgebaseId") or 1)
     environment = metadata.get("environment")
 
@@ -242,11 +238,12 @@ async def agent_entrypoint(ctx: JobContext):
         environment = metadata.get("environment", "groq").lower()
         try:
             if environment == "gemini":
-                return groq.STT()
+                return openai.STT()
             elif environment == "open ai":
                 return openai.STT()
             else:
-                return groq.STT()
+                print("Using deepgram whisper-large")
+                return openai.STT()
         except Exception as e:
             return openai.STT()
 
@@ -267,12 +264,55 @@ async def agent_entrypoint(ctx: JobContext):
         llm=create_llm_instance(),
         tts=create_tts_instance(),
         stt=create_stt_instance(),
-        vad=silero.VAD.load(),
         max_tool_steps=8,
+        vad=silero.VAD.load(
+        min_speech_duration=0.2,      # must speak at least 200ms
+        min_silence_duration=1.2,     # needs 1.2s of silence before ending speech
+        activation_threshold=0.6      # slightly stricter speech detection
+        ),
         allow_interruptions=True,
         mcp_servers=mcp_servers,
     )
 
+    # def save_transcription_to_db(text: str, speaker_type: str):
+    #     if not text:
+    #         return
+        
+    #     call_log_id = conversation_id
+    #     if not call_log_id:
+    #         logger.warning("Could not save transcription to DB, no conversation_id")
+    #         return
+
+    #     payload = {
+    #         "call_log_id": call_log_id,
+    #         "text": text,
+    #         "type": speaker_type,
+    #         "character_count": len(text),
+    #         "status": 1,
+    #         "created_datetime": datetime.utcnow().isoformat()
+    #     }
+        
+    #     try:
+    #         # Not using async requests here to avoid adding a new dependency (httpx)
+    #         # This is a quick operation, so it should be fine.
+    #         requests.post("http://localhost:3000/api/call-transcriptions", json=payload, timeout=2)
+    #     except Exception as e:
+    #         logger.error(f"Failed to save transcription to DB: {e}")
+
+
+    @session.on("user_input_transcribed")
+    def on_user_transcribed(ev: UserInputTranscribedEvent):
+        if ev.transcript:
+            logger.info(f"USER SAID: {ev.transcript}")
+            # save_transcription_to_db(ev.text, "user")
+
+
+    @session.on("conversation_item_added")
+    def on_agent_output(ev: ConversationItemAddedEvent):
+        if getattr(ev, "item", None) and getattr(ev.item, "role", None) == "assistant":
+            logger.info(f"AGENT SAID: {ev.item.content}")
+            # save_transcription_to_db(ev.response.text, "ai")
+    
     # Create background audio player for thinking sounds only (no continuous ambient sound)
     # This will only play during response generation, not continuously
     background_audio = BackgroundAudioPlayer(
@@ -285,42 +325,6 @@ async def agent_entrypoint(ctx: JobContext):
     await background_audio.start(room=ctx.room, agent_session=session)
     # Save for later use inside message processing
     ctx.proc.userdata["background_audio"] = background_audio
-
-    def on_lk_chat(text_reader, participant_identity):
-        print(f"Received lk.chat event from {participant_identity}")
-        asyncio.create_task(handle_lk_chat(text_reader))
-
-    async def handle_lk_chat(text_reader):
-        text = await text_reader.read_all()
-
-        credit_check = await check_customer_credits(
-            customer_id, 10
-        )  # Need at least 10 credits to continue
-        if not credit_check.get("has_credits"):
-
-            logger.warning(
-                f"Speech input blocked due to insufficient credits. Current: {credit_check.get('current_credits')}, Required: 10, Customer ID: {customer_id}"
-            )
-            return  # Don't process the speech
-
-        await log_chat_transaction(
-            {
-                "conversationId": conversation_id,
-                "customerId": customer_id,
-                "userSessionId": user_session_id,
-                "message": text,
-                "isQuestion": True,
-                "chatType": "normal",
-                "credits": 1,
-            }
-        )
-        # Generate an audio reply directly using LLM (no text echo since voice-only)
-        try:
-            session.generate_reply(user_input=text, tool_choice="auto")
-        except Exception as e:
-            logger.error(f"Failed to generate reply for text input: {e}")
-
-    ctx.room.register_text_stream_handler("lk.chat", on_lk_chat)
 
     await session.start(agent=agent, room=ctx.room)
     logger.info("Agent session started")

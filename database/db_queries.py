@@ -258,197 +258,6 @@ async def upsert_customer_realtime_information(customer_id: int, key: str, value
             pass
         return False
 
-
-async def get_lead_form(chat_bot_id: int):
-    """Get lead form for a specific chat bot."""
-    try:
-        connection_object = connection_pool.get_connection()
-        cursor = connection_object.cursor(dictionary=True)
-
-        # Get lead form
-        lead_form_query = """
-            SELECT 
-                chat_bot_lead_form_id as id,
-                chat_bot_id as chatBotId,
-                title,
-                user_consent_text as userConsentText
-            FROM chat_bot_lead_form 
-            WHERE chat_bot_id = %s AND status = 1
-        """
-        cursor.execute(lead_form_query, (chat_bot_id,))
-        lead_form = cursor.fetchone()
-        cursor.reset()
-        if not lead_form:
-            cursor.close()
-            connection_object.close()
-            return None
-
-        # Get input fields for the lead form
-        input_fields_query = """
-            SELECT 
-                chat_bot_lead_input_field_id as id,
-                label,
-                placeholder
-            FROM chat_bot_lead_input_field 
-            WHERE chat_bot_lead_form_id = %s AND status = 1
-        """
-        cursor.execute(input_fields_query, (lead_form['id'],))
-        input_fields = cursor.fetchall()
-
-        cursor.close()
-        connection_object.close()
-
-        # Add input fields to lead form
-        lead_form['chatBotLeadInputField'] = input_fields
-
-        return lead_form
-
-    except Exception as e:
-        logger.error("Error retrieving lead form", extra={
-            "error": str(e),
-            "chat_bot_id": chat_bot_id
-        })
-        raise
-
-
-async def get_chat_bot_content_slides(chat_bot_id: int):
-    """
-    Get ordered slides for the latest attachment-type content for a chat bot.
-    Returns a list of slide dicts, or an empty list if none found.
-    """
-    try:
-        connection_object = connection_pool.get_connection()
-        cursor = connection_object.cursor(dictionary=True)
-
-        # Fetch a single content record of type 'attachment'
-        content_query = """
-            SELECT 
-                chat_bot_content_id AS id,
-                chat_bot_id,
-                chat_bot_content_type
-            FROM chat_bot_content
-            WHERE chat_bot_id = %s AND status = 1 AND chat_bot_content_type = 'attachment'
-            ORDER BY chat_bot_content_id DESC
-            LIMIT 1
-        """
-        cursor.execute(content_query, (chat_bot_id,))
-        content = cursor.fetchone()
-        if not content:
-            cursor.close()
-            connection_object.close()
-            return []
-
-        # Fetch ordered slides for this content
-        slides_query = """
-            SELECT 
-                id,
-                chat_bot_content_id,
-                context,
-                transcript,
-                slide_order
-            FROM chat_bot_content_slide
-            WHERE chat_bot_content_id = %s
-            ORDER BY slide_order ASC
-        """
-        cursor.execute(slides_query, (content['id'],))
-        slides = cursor.fetchall()
-        cursor.close()
-        connection_object.close()
-        return slides
-    except Exception as e:
-        logger.error("Error getting chat bot content slides", extra={
-            "error": str(e),
-            "chat_bot_id": chat_bot_id,
-        })
-        raise
-
-
-async def create_user_lead_form(chat_bot_id: int, user_lead_dto: dict):
-    """Create user lead form entry with associated values."""
-    try:
-        connection_object = connection_pool.get_connection()
-        cursor = connection_object.cursor(dictionary=True)
-
-        # Start transaction
-        connection_object.start_transaction()
-
-        # Create user lead
-        user_lead_query = f"""
-            INSERT INTO user_lead (user_session_id, chat_bot_id, chat_bot_lead_form_id, conversation_id)
-            VALUES ({user_lead_dto.get('user_session_id')}, {chat_bot_id}, {user_lead_dto.get('chat_bot_lead_form_id')}, {user_lead_dto.get('conversation_id')})
-        """
-        cursor.execute(user_lead_query)
-
-        user_lead_id = cursor.lastrowid
-
-        if not user_lead_id:
-            connection_object.rollback()
-            cursor.close()
-            connection_object.close()
-            return False
-
-        # Create user lead values
-        for form_item in user_lead_dto.get('form'):
-            user_lead_value_query = f"""
-            INSERT INTO user_lead_value (user_lead_id, lable, value)
-            VALUES ({user_lead_id}, '{form_item.get('lable')}', '{form_item.get('value')}')
-            """
-            cursor.execute(user_lead_value_query)
-
-        # Commit transaction
-        connection_object.commit()
-        cursor.close()
-        connection_object.close()
-
-        return True
-
-    except Exception as e:
-        try:
-            connection_object.rollback()
-        except Exception:
-            pass
-        logger.error("Error creating user lead form", extra={
-            "error": str(e),
-            "chat_bot_id": chat_bot_id,
-            "user_lead_dto": user_lead_dto
-        })
-        raise
-
-
-async def is_lead_already_exists(chat_bot_id: int, lead_form_id: int, user_session_id: int, conversation_id: int):
-    """Check if a lead already exists for the given parameters."""
-    try:
-        connection_object = connection_pool.get_connection()
-        cursor = connection_object.cursor(dictionary=True)
-
-        select_query = """
-            SELECT user_lead_id 
-            FROM user_lead 
-            WHERE chat_bot_id = %s 
-                AND chat_bot_lead_form_id = %s 
-                AND conversation_id = %s 
-                AND user_session_id = %s
-        """
-        cursor.execute(select_query, (chat_bot_id, lead_form_id,
-                       conversation_id, user_session_id))
-        result = cursor.fetchone()
-
-        cursor.close()
-        connection_object.close()
-
-        return result is not None
-
-    except Exception as e:
-        logger.error("Error checking if lead exists", extra={
-            "error": str(e),
-            "chat_bot_id": chat_bot_id,
-            "lead_form_id": lead_form_id,
-            "user_session_id": user_session_id,
-            "conversation_id": conversation_id
-        })
-        raise
-
-
 async def log_chat_transaction(data: dict):
     """Log a chat transaction to the database."""
     try:
@@ -507,7 +316,6 @@ async def log_chat_transaction(data: dict):
         })
         return None
 
-
 async def fetch_customer_mcp_server_urls(customer_id: int) -> list[str]:
     """Fetch MCP server URLs configured for a given customer."""
     try:
@@ -544,158 +352,51 @@ async def fetch_customer_mcp_server_urls(customer_id: int) -> list[str]:
         })
         return []
 
-
-async def fetch_shared_chatbot_mcp_server_urls(customer_id: int, knowledgebase_id: int, uuid: str) -> list[str]:
-    """Fetch MCP server URLs configured for a shared chatbot context."""
-    try:
-        connection_object = connection_pool.get_connection()
-        cursor = connection_object.cursor(dictionary=True)
-
-        shared_integration_query = """
-            SELECT mcp_tool_integration_id
-            FROM shared_chatbot_mcp_integration
-            WHERE customer_id = %s AND chat_bot_id = %s AND uuid = %s AND status = 1
-        """
-        cursor.execute(shared_integration_query,
-                       (customer_id, knowledgebase_id, uuid))
-        shared_integrations = cursor.fetchall() or []
-
-        logger.info(
-            f"Shared chatbot integrations found: {len(shared_integrations)} for customer {customer_id}, KB {knowledgebase_id}, UUID {uuid}")
-
-        if not shared_integrations:
-            cursor.close()
-            connection_object.close()
-            logger.warning(
-                f"No shared chatbot MCP integrations found for customer {customer_id}, KB {knowledgebase_id}, UUID {uuid}")
-            return []
-
-        integration_ids = [row['mcp_tool_integration_id']
-                           for row in shared_integrations if row.get('mcp_tool_integration_id')]
-
-        logger.info(f"MCP tool integration IDs found: {integration_ids}")
-
-        if not integration_ids:
-            cursor.close()
-            connection_object.close()
-            return []
-
-        placeholders = ','.join(['%s'] * len(integration_ids))
-        mcp_integration_query = f"""
-            SELECT mcp_server_url
-            FROM composio_mcp_tool_integration
-            WHERE id IN ({placeholders}) AND is_enabled = 1
-        """
-        cursor.execute(mcp_integration_query, integration_ids)
-        mcp_integrations = cursor.fetchall() or []
-
-        logger.info(f"MCP integrations found: {len(mcp_integrations)} URLs")
-
-        urls = [row.get('mcp_server_url')
-                for row in mcp_integrations if row.get('mcp_server_url')]
-
-        logger.info(f"Final MCP server URLs for shared chatbot: {urls}")
-
-        cursor.close()
-        connection_object.close()
-        return urls
-
-    except Exception as e:
-        logger.error("Error fetching shared chatbot MCP server URLs", extra={
-            "error": str(e),
-            "customer_id": customer_id,
-            "knowledgebase_id": knowledgebase_id,
-            "uuid": uuid,
-        })
-        return []
-
-
 async def fetch_metadata_by_trunk_phone_number(trunk_phone_number: str) -> dict:
     """Fetch minimal metadata (single DB query) using trunk phone number.
 
     Returns dict with keys: conversationId, customerId, userSessionId, knowledgebaseId, environment.
     Falls back to safe defaults if not found. Adds raw chatbot row under key 'chatbot'.
     """
-    return {
-        # "customerId": 1492,
-        # 'userSessionId': '7cd34768-8183-4da3-8ab4-6a2277c7e248',
-        # 'conversationId': '56045-1757538652039',
-        # "knowledgebaseId": 4207,
-        # "environment": "groq",
-        # 'voice': 'Arista-PlayAI',
-        'llmName': 'openai/gpt-oss-20b',
-    }
-    # if not trunk_phone_number:
-    #     return defaults
-    # try:
-    #     connection_object = connection_pool.get_connection()
-    #     cursor = connection_object.cursor(dictionary=True)
-    #     query = (
-    #         """
-    #         SELECT cb.chat_bot_id, cb.customer_id, cb.environment
-    #         FROM chat_bot cb
-    #         INNER JOIN chat_bot_phone_number cbpn ON cbpn.chat_bot_id = cb.chat_bot_id
-    #         WHERE cbpn.trunk_phone_number = %s AND cbpn.status = 1
-    #         LIMIT 1
-    #         """
-    #     )
-    #     cursor.execute(query, (trunk_phone_number,))
-    #     row = cursor.fetchone()
-    #     cursor.close()
-    #     connection_object.close()
-    #     if not row:
-    #         return defaults
-    #     meta = {
-    #         # using chat_bot_id as conversation grouping fallback
-    #         "conversationId": str(row.get("chat_bot_id", 1)),
-    #         "customerId": str(row.get("customer_id", 1)),
-    #         "userSessionId": "0",
-    #         "knowledgebaseId": str(row.get("chat_bot_id", 1)),
-    #         "environment": (row.get("environment") or "groq").lower(),
-    #         "chatbot": row,
-    #     }
-    #     return meta
-    # except Exception as e:
-    #     logger.error("Error fetching metadata by trunk phone number", extra={
-    #                  "error": str(e), "trunk_phone_number": trunk_phone_number})
-    #     return defaults
-
-
-async def fetch_metadata_by_chat_bot_id(chat_bot_id: int) -> dict:
-    """Fetch minimal metadata (single DB query) using chat bot id.
-
-    Similar shape as fetch_metadata_by_trunk_phone_number.
-    """
-    defaults = {
-        "conversationId": "1",
-        "customerId": "1",
-        "userSessionId": "0",
-        "knowledgebaseId": str(chat_bot_id or 1),
-        "environment": "groq",
-        "chatbot": None,
-    }
-    if not chat_bot_id:
-        return defaults
     try:
         connection_object = connection_pool.get_connection()
         cursor = connection_object.cursor(dictionary=True)
-        query = "SELECT chat_bot_id, customer_id, environment FROM chat_bot WHERE chat_bot_id = %s LIMIT 1"
-        cursor.execute(query, (chat_bot_id,))
+        query = (
+            """
+            SELECT
+                cpnm.customer_id,
+                cti.knowledge_base_id,
+                lm.llm_environment,
+                lm.llm_model,
+                v.voice_setup
+            FROM
+                customer_phone_number_mapping AS cpnm
+            JOIN
+                customer_twilio_information AS cti ON cti.customer_phone_number_mapping_id = cpnm.customer_phone_number_mapping_id
+            JOIN
+                llm_model AS lm ON lm.llm_model_id = cti.llm_model_id
+            JOIN
+                voice AS v ON v.voice_id = cti.voice_id
+            WHERE
+                cpnm.phone_number = %s
+            LIMIT 1
+            """
+        )
+        cursor.execute(query, (trunk_phone_number,))
         row = cursor.fetchone()
         cursor.close()
         connection_object.close()
         if not row:
-            return defaults
+            return None
         meta = {
-            "conversationId": str(row.get("chat_bot_id", 1)),
-            "customerId": str(row.get("customer_id", 1)),
-            "userSessionId": "0",
-            "knowledgebaseId": str(row.get("chat_bot_id", 1)),
-            "environment": (row.get("environment") or "groq").lower(),
-            "chatbot": row,
+            "customerId": row.get("customer_id"),
+            "knowledgebaseId": row.get("knowledge_base_id"),
+            "environment": row.get("llm_environment"),
+            "voice": row.get("voice_setup"),
+            "llmName": row.get("llm_model"),
         }
         return meta
     except Exception as e:
-        logger.error("Error fetching metadata by chat bot id", extra={
-                     "error": str(e), "chat_bot_id": chat_bot_id})
-        return defaults
+        logger.error("Error fetching metadata by trunk phone number", extra={
+                     "error": str(e), "trunk_phone_number": trunk_phone_number})
+        return None

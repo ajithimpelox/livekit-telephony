@@ -70,9 +70,9 @@ async def make_outgoing_call(phone_number: str, room_name: str = None):
  'conversationId': '56045-1757538652039', 
 'knowledgebaseId': 4207,
  'customerId': 1492,
- 'voice': 'Arista-PlayAI',
+ 'voice': 'f786b574-daa5-4673-aa0c-cbe3e8534c02',
  'enableStream': 'true', 
-'llmName': 'openai/gpt-oss-20b',
+'llmName': 'gemini-2.5-pro',
  'namespace': 'chatbot-1492-ak-normal-1756890436786', 
 'indexName': 'chatbot-01', 
 'customPrompt': 'Use the following pieces of context to answer the question at the end.',
@@ -80,7 +80,7 @@ async def make_outgoing_call(phone_number: str, room_name: str = None):
 'integrationsEnabled': ['twilio'], 
 'timestamp': 1757538653499,
  'isEmbedSharedChatbot': False,
- 'environment': 'Groq',
+ 'environment': 'gemini',
  'isoutBoundCall': True,
                 })
             )
@@ -93,10 +93,11 @@ async def make_outgoing_call(phone_number: str, room_name: str = None):
         sip_participant = await lkapi.sip.create_sip_participant(
             api.CreateSIPParticipantRequest(
                 room_name=room_name,
+                krisp_enabled=False,
                 sip_trunk_id=OUTBOUND_TRUNK_ID,
                 sip_call_to=phone_number,
                 participant_identity="phone_user",
-                participant_name=f"Caller to {phone_number}"
+                participant_name=f"Caller to {phone_number}",
             )
         )
         logger.info(f"Created SIP participant: {sip_participant}")
@@ -119,7 +120,7 @@ async def test_outgoing_call():
     Modify the phone_number below to test with your desired number
     """
     # MODIFY THIS PHONE NUMBER FOR TESTING
-    phone_number = "+919566185905"  # Replace with your test phone number
+    phone_number = "+917845512947"  # Replace with your test phone number
 
     logger.info("=== Outgoing Call Test ===")
     logger.info(f"Target phone number: {phone_number}")

@@ -120,7 +120,7 @@ async def test_outgoing_call():
     Modify the phone_number below to test with your desired number
     """
     # MODIFY THIS PHONE NUMBER FOR TESTING
-    phone_number = "+917845512947"  # Replace with your test phone number
+    phone_number = "+919566185905"  # Replace with your test phone number
 
     logger.info("=== Outgoing Call Test ===")
     logger.info(f"Target phone number: {phone_number}")

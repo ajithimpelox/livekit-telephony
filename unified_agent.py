@@ -81,7 +81,7 @@ async def agent_entrypoint(ctx: JobContext):
     except Exception:
         pass
 
-    is_outbound = metadata.get("isoutBoundCall")
+    is_outbound = metadata.get("is_outbound_call")
     if is_outbound:
         logger.info("Outbound call detected, using room metadata.")
     elif trunkPhoneNumber:

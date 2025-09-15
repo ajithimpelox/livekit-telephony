@@ -365,6 +365,7 @@ async def fetch_metadata_by_trunk_phone_number(trunk_phone_number: str) -> dict:
             """
             SELECT
                 cpnm.customer_id,
+                cti.sip_trunk_id,
                 cti.knowledge_base_id,
                 lm.llm_environment,
                 lm.llm_model,
@@ -390,6 +391,7 @@ async def fetch_metadata_by_trunk_phone_number(trunk_phone_number: str) -> dict:
             return None
         meta = {
             "customerId": row.get("customer_id"),
+            "sipTrunkId":row.get("sip_trunk_id"),
             "knowledgebaseId": row.get("knowledge_base_id"),
             "environment": row.get("llm_environment"),
             "voice": row.get("voice_setup"),

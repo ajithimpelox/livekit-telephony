@@ -40,6 +40,6 @@ if __name__ == "__main__":
             prewarm_fnc=prewarm,
             ws_url=ws_url,
             http_proxy=None,
-            agent_name="telephone-enhanced-agent",
+            agent_name="telephone-agent",
         )
     )

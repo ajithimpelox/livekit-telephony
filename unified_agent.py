@@ -249,7 +249,7 @@ async def agent_entrypoint(ctx: JobContext):
             min_silence_duration=1.2,
             activation_threshold=0.6,
         ),
-        allow_interruptions=True,
+        allow_interruptions=False,
         mcp_servers=mcp_servers,
     )
 
